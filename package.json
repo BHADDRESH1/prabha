@@ -12,10 +12,10 @@
   "author": "",
   "license": "ISC",
   "type": "module",
-  "dependencies": {
-    "firebase": "^11.10.0"
-  },
   "devDependencies": {
     "vite": "^6.2.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.103.0"
   }
 }

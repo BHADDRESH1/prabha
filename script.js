@@ -1,8 +1,7 @@
 /* 
   Prabha Agencies - Main Script (V3 - Split Projects & Gallery)
 */
-import { collection, getDocs } from "firebase/firestore";
-import { db } from "./src/firebase.js";
+import { supabase } from "./src/supabase.js";
 
 document.addEventListener('DOMContentLoaded', () => {
     const navbar = document.getElementById('navbar');
@@ -158,26 +157,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // 5. Data Loading
     async function loadData() {
         try {
-            const projectsSnapshot = await getDocs(collection(db, "projects"));
-            const projectsData = projectsSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*');
+            if (projectsError) throw projectsError;
 
-            const gallerySnapshot = await getDocs(collection(db, "gallery"));
-            const galleryData = gallerySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const { data: galleryData, error: galleryError } = await supabase.from('gallery').select('*');
+            if (galleryError) throw galleryError;
 
-            if (projectsData.length === 0) {
+            if (!projectsData || projectsData.length === 0) {
                  const container = document.getElementById('projects-container');
                  if (container) container.innerHTML = '<p style="text-align:center; width:100%; color:#666;">No projects yet</p>';
             } else {
                  renderProjects(projectsData);
             }
 
-            if (galleryData.length === 0) {
+            if (!galleryData || galleryData.length === 0) {
                  const gGrid = document.getElementById('galleryGrid');
                  if (gGrid) gGrid.innerHTML = '<p style="text-align:center; width:100%; color:#666;">No images available</p>';
             } else {
@@ -185,7 +178,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
         } catch (error) {
-            console.error("Failed to load data from Firebase.", error);
+            console.error("Failed to load data from Supabase.", error);
         }
     }
 

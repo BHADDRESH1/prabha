@@ -1,9 +1,7 @@
 /* 
   Prabha Agencies - Admin Script (V6 - Split Projects & Gallery)
 */
-import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
-import { db, storage } from "./src/firebase.js";
+import { supabase } from "./src/supabase.js";
 
 document.addEventListener('DOMContentLoaded', () => {
     // Elements - Sections
@@ -46,23 +44,42 @@ document.addEventListener('DOMContentLoaded', () => {
     window.cachedGallery = [];
 
     // 1. Session Management
-    if (sessionStorage.getItem('admin_logged_in') === 'true') {
-        showDashboard();
-    }
-
-    loginForm.addEventListener('submit', (e) => {
-        e.preventDefault();
-        if (document.getElementById('username').value === 'admin' && 
-            document.getElementById('password').value === '1234') {
-            sessionStorage.setItem('admin_logged_in', 'true');
+    async function checkSession() {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
             showDashboard();
-        } else {
-            document.getElementById('login-error').style.display = 'block';
         }
+    }
+    checkSession();
+
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('username').value;
+        const password = document.getElementById('password').value;
+        
+        const btn = loginForm.querySelector('button[type="submit"]');
+        const errObj = document.getElementById('login-error');
+        btn.disabled = true;
+        btn.textContent = 'Logging in...';
+        
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password,
+        });
+
+        if (error) {
+            errObj.textContent = error.message;
+            errObj.style.display = 'block';
+        } else {
+            errObj.style.display = 'none';
+            showDashboard();
+        }
+        btn.disabled = false;
+        btn.textContent = 'Login';
     });
 
-    logoutBtn.addEventListener('click', () => {
-        sessionStorage.removeItem('admin_logged_in');
+    logoutBtn.addEventListener('click', async () => {
+        await supabase.auth.signOut();
         location.reload();
     });
 
@@ -249,9 +266,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (fileList.length > 0) {
                 finalImages = await Promise.all(fileList.map(async file => {
-                    const storageRef = ref(storage, `uploads/${Date.now()}-${file.name}`);
-                    await uploadBytes(storageRef, file);
-                    return await getDownloadURL(storageRef);
+                    const fileName = `${Date.now()}-${file.name}`;
+                    const { data: uploadData, error: uploadError } = await supabase.storage.from('uploads').upload(fileName, file);
+                    if (uploadError) throw uploadError;
+                    
+                    const { data: publicUrlData } = supabase.storage.from('uploads').getPublicUrl(fileName);
+                    return publicUrlData.publicUrl;
                 }));
 
                 // Cleanup old images if editing
@@ -259,8 +279,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     const existing = (type === 'projects' ? window.cachedProjects : window.cachedGallery).find(i => i.id === data.editingId);
                     if (existing && existing.images) {
                         for (let url of existing.images) {
-                            if (url.includes('firebasestorage')) {
-                                deleteObject(ref(storage, url)).catch(e => console.log("Failed to clean up old image", e));
+                            if (url.includes('supabase')) {
+                                const urlObj = new URL(url);
+                                const pathParts = urlObj.pathname.split('/storage/v1/object/public/uploads/');
+                                if (pathParts.length > 1) {
+                                    const filePath = pathParts[1];
+                                    await supabase.storage.from('uploads').remove([filePath]).catch(e => console.log("Failed to clean up old image", e));
+                                }
                             }
                         }
                     }
@@ -280,20 +305,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 description: data.desc,
                 category: data.category,
                 images: finalImages,
-                updatedAt: serverTimestamp()
+                updatedAt: new Date().toISOString()
             };
 
             if (type === 'projects' && !isEdit) {
                 docData.status = "Recently Added";
-                docData.createdAt = serverTimestamp();
+                docData.createdAt = new Date().toISOString();
             } else if (!isEdit) {
-                docData.createdAt = serverTimestamp();
+                docData.createdAt = new Date().toISOString();
             }
 
             if (isEdit) {
-                await updateDoc(doc(db, type, data.editingId), docData);
+                const { error } = await supabase.from(type).update(docData).eq('id', data.editingId);
+                if (error) throw error;
             } else {
-                await addDoc(collection(db, type), docData);
+                const { error } = await supabase.from(type).insert([docData]);
+                if (error) throw error;
             }
 
             alert(`${label} saved successfully!`);
@@ -306,16 +333,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 6. Admin Lists Rendering
     async function renderAdminProjects() {
-        const snap = await getDocs(collection(db, "projects"));
-        window.cachedProjects = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const { data: projects, error } = await supabase.from('projects').select('*');
+        if (error) console.error("Error fetching projects", error);
+        window.cachedProjects = projects || [];
         renderList(adminProjectsList, window.cachedProjects, 'editProject', 'projects', renderAdminProjects);
     }
 
     async function renderAdminGallery() {
-        const snap = await getDocs(collection(db, "gallery"));
-        window.cachedGallery = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const { data: gallery, error } = await supabase.from('gallery').select('*');
+        if (error) console.error("Error fetching gallery", error);
+        window.cachedGallery = gallery || [];
         renderList(adminGalleryList, window.cachedGallery, 'editGallery', 'gallery', renderAdminGallery);
     }
 
@@ -350,12 +378,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     try {
                         if (item.images && item.images.length) {
                             for (let url of item.images) {
-                                if (url.includes('firebasestorage')) {
-                                    await deleteObject(ref(storage, url)).catch(e => console.log("Failed to clean up image on delete", e));
+                                if (url.includes('supabase')) {
+                                    const urlObj = new URL(url);
+                                    const pathParts = urlObj.pathname.split('/storage/v1/object/public/uploads/');
+                                    if (pathParts.length > 1) {
+                                        const filePath = pathParts[1];
+                                        await supabase.storage.from('uploads').remove([filePath]).catch(e => console.log("Failed to clean up image on delete", e));
+                                    }
                                 }
                             }
                         }
-                        await deleteDoc(doc(db, storageKey, item.id));
+                        const { error } = await supabase.from(storageKey).delete().eq('id', item.id);
+                        if (error) alert("Failed to delete item from DB.");
                         refreshCallback();
                     } catch (err) {
                         console.error(err);
