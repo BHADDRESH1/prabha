@@ -334,10 +334,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // Contact Form
     const contactForm = document.getElementById('contact-form');
     if (contactForm) {
-        contactForm.addEventListener('submit', (e) => {
+        contactForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            alert('Thank you! We will contact you soon.');
-            contactForm.reset();
+
+            const name = document.querySelector("input[placeholder='Your Name']").value;
+            const email = document.querySelector("input[placeholder='Your Email']").value;
+            const message = document.querySelector("textarea").value;
+
+            const { data, error } = await supabase
+                .from("contacts")
+                .insert([{ name, email, message }]);
+
+            if (error) {
+                alert("Error sending message");
+                console.log(error);
+            } else {
+                alert("Message sent successfully ✅");
+                contactForm.reset();
+            }
         });
     }
 
