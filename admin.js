@@ -54,13 +54,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = document.getElementById('username').value;
+        const username = document.getElementById('username').value;
         const password = document.getElementById('password').value;
         
         const btn = loginForm.querySelector('button[type="submit"]');
         const errObj = document.getElementById('login-error');
         btn.disabled = true;
         btn.textContent = 'Logging in...';
+
+        const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('email')
+            .eq('username', username)
+            .single();
+
+        if (userError || !userData) {
+            errObj.textContent = "User not found";
+            errObj.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Login';
+            return;
+        }
+
+        const email = userData.email;
         
         const { data, error } = await supabase.auth.signInWithPassword({
             email: email,
@@ -68,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (error) {
-            errObj.textContent = error.message;
+            errObj.textContent = "Invalid password";
             errObj.style.display = 'block';
         } else {
             errObj.style.display = 'none';
