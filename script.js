@@ -338,12 +338,12 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
 
             const name = document.querySelector("input[placeholder='Your Name']").value;
-            const email = document.querySelector("input[placeholder='Your Email']").value;
+            const contactNumber = document.querySelector("input[placeholder='Your Contact Number']").value;
             const message = document.querySelector("textarea").value;
 
             const { data, error } = await supabase
                 .from("contacts")
-                .insert([{ name, email, message }]);
+                .insert([{ name, email: contactNumber, message }]);
 
             if (error) {
                 alert("Error sending message");

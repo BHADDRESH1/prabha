@@ -755,10 +755,15 @@ footer {
   align-items: center;
   justify-content: center;
   margin: 0 auto 18px;
-  font-size: 1.8rem;
-  color: var(--primary-blue);
   transition: transform 0.35s ease;
   box-shadow: 0 4px 14px rgba(0, 45, 114, 0.12);
+  overflow: hidden;
+}
+
+.dealer-icon-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .dealer-card:hover .dealer-icon-wrap {
